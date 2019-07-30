@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/DrakeW/redis-cache-proxy/proxy"
@@ -13,16 +12,16 @@ var rootCmd = &cobra.Command{
 	Short:        "redis-proxy is a simple read-through Redis proxy that adds caching capability in front of your redis instance",
 	Version:      "0.0.1",
 	SilenceUsage: true,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("TBD")
-	},
+	Run:          startProxyServer,
 }
 
-// Execute runs the command
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+func startProxyServer(cmd *cobra.Command, args []string) {
+	proxyConfig := proxy.Config{
+		ListenPort: listenPort,
+		RedisAddr:  redisAddr,
+		MaxConn:    maxConnection,
 	}
+	proxy.Run(proxyConfig)
 }
 
 // port the proxy service should listen to
@@ -46,4 +45,11 @@ func init() {
 	rootCmd.Flags().IntVar(&cacheExpiry, "cache-expiry", proxy.DefaultGlobalCacheExpiry, "Global cache expiry time duration (in seconds)")
 	rootCmd.Flags().IntVar(&cacheMaxEntry, "cache-max-entry", proxy.DefaultCacheMaxEntry, "Maximum number of keys the cache holds at a time")
 	rootCmd.Flags().IntVar(&maxConnection, "max-conn", proxy.DefaultMaxConcurrentConn, "Maximum number of concurrent connections the proxy accepts")
+}
+
+// Execute runs the command
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
