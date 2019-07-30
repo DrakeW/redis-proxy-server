@@ -4,14 +4,16 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
+	"github.com/DrakeW/redis-cache-proxy/cache"
 	"github.com/go-redis/redis"
 	"github.com/sirupsen/logrus"
 )
 
 const (
 	// DefaultListenPort is the default proxy listen port
-	DefaultListenPort = 8888
+	DefaultListenPort = "8888"
 	// DefaultGlobalCacheExpiry is the default global cache expiry time duration in seconds
 	DefaultGlobalCacheExpiry = 300 // 5min
 	// DefaultCacheMaxEntry is the default maximum number of cache entries
@@ -22,9 +24,11 @@ const (
 
 // Config represents the proxy configuration
 type Config struct {
-	RedisAddr  string
-	ListenPort int
-	MaxConn    int
+	RedisAddr       string
+	ListenPort      string
+	MaxConn         uint
+	CacheExpiry     time.Duration
+	CacheMaxEntries uint
 }
 
 // server represents an web server that runs the proxy
@@ -32,6 +36,7 @@ type server struct {
 	redisdb *redis.Client
 	config  Config
 	logger  *logrus.Logger
+	cache   *cache.LRU
 }
 
 // newServer returns a new server object based on the proxy config input
@@ -58,39 +63,56 @@ func newServer(config Config) *server {
 	if err != nil {
 		logger.Fatal("failed to connect to redis at ", config.RedisAddr)
 	}
-
+	// initialize cache
+	cache := cache.NewLRUCache(&cache.Config{
+		Expiry:     config.CacheExpiry * time.Second,
+		MaxEntries: config.CacheMaxEntries,
+	})
 	return &server{
 		redisdb: client,
 		config:  config,
 		logger:  logger,
+		cache:   cache,
 	}
 }
 
 // API - Method: GET - Endpoint - /get?key=<key>
 func (s *server) getKey(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get("key")
-
-	// read from redis
-	val, err := s.getKeyFromRedis(key)
-	if err == redis.Nil {
-		http.Error(w, fmt.Sprintf("Entry with key %s doesn't exist", key), http.StatusNotFound)
-	} else if err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	// read from cache
+	val, err := s.cache.Get(key)
+	if err != nil || val == nil {
+		// read from redis
+		s.getKeyFromRedis(w, key)
 	} else {
-		fmt.Fprint(w, val)
+		valStr, ok := val.(string)
+		// if the cached value is not string, it's probably corrupted and should be retrieved using a different cmd
+		if !ok {
+			s.getKeyFromRedis(w, key)
+		} else {
+			s.logger.Infof("successfully retrieved key \"%s\" from cache", key)
+			fmt.Fprintf(w, valStr)
+		}
 	}
 }
 
 // getKeyFromRedis performs a GET command with a key to redis
-func (s *server) getKeyFromRedis(key string) (string, error) {
+func (s *server) getKeyFromRedis(w http.ResponseWriter, key string) {
 	val, err := s.redisdb.Get(key).Result()
 	if err == redis.Nil {
-		return "", err
+		http.Error(w, fmt.Sprintf("Entry with key %s doesn't exist", key), http.StatusNotFound)
 	} else if err != nil {
-		s.logger.Error("failed to retrieve key ", key, "from redis - error: ", err.Error())
-		return "", err
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		s.logger.Errorf("failed to retrieve key \"%s\" from redis - error: %s", key, err.Error())
 	} else {
-		return val, nil
+		// add retrieved key-value to cache
+		s.logger.Infof("successfully retrieved key \"%s\" from redis", key)
+		err = s.cache.Add(key, val)
+		if err != nil {
+			// log the error but still returns the value
+			s.logger.Errorf("failed to add key \"%s\" to cache", key)
+		}
+		fmt.Fprint(w, val)
 	}
 }
 
@@ -99,6 +121,6 @@ func Run(config Config) {
 	server := newServer(config)
 	http.HandleFunc("/get", server.getKey)
 
-	addr := fmt.Sprintf(":%d", server.config.ListenPort)
+	addr := fmt.Sprintf(":%s", server.config.ListenPort)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }

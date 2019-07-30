@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"time"
 
 	"github.com/DrakeW/redis-cache-proxy/proxy"
 	"github.com/spf13/cobra"
@@ -17,34 +18,36 @@ var rootCmd = &cobra.Command{
 
 func startProxyServer(cmd *cobra.Command, args []string) {
 	proxyConfig := proxy.Config{
-		ListenPort: listenPort,
-		RedisAddr:  redisAddr,
-		MaxConn:    maxConnection,
+		ListenPort:      listenPort,
+		RedisAddr:       redisAddr,
+		MaxConn:         maxConnection,
+		CacheExpiry:     time.Duration(cacheExpiry),
+		CacheMaxEntries: cacheMaxEntry,
 	}
 	proxy.Run(proxyConfig)
 }
 
 // port the proxy service should listen to
-var listenPort int
+var listenPort string
 
 // address of the backing redis instance
 var redisAddr string
 
 // global cache expiry time duration
-var cacheExpiry int
+var cacheExpiry int64
 
 // maximum number of keys in cache
-var cacheMaxEntry int
+var cacheMaxEntry uint
 
 // maximum concurrent client connection
-var maxConnection int
+var maxConnection uint
 
 func init() {
-	rootCmd.Flags().IntVarP(&listenPort, "port", "p", proxy.DefaultListenPort, "The port redis-proxy should listen to")
+	rootCmd.Flags().StringVarP(&listenPort, "port", "p", proxy.DefaultListenPort, "The port redis-proxy should listen to")
 	rootCmd.Flags().StringVar(&redisAddr, "redis-addr", "", "The address of the backing redis instance")
-	rootCmd.Flags().IntVar(&cacheExpiry, "cache-expiry", proxy.DefaultGlobalCacheExpiry, "Global cache expiry time duration (in seconds)")
-	rootCmd.Flags().IntVar(&cacheMaxEntry, "cache-max-entry", proxy.DefaultCacheMaxEntry, "Maximum number of keys the cache holds at a time")
-	rootCmd.Flags().IntVar(&maxConnection, "max-conn", proxy.DefaultMaxConcurrentConn, "Maximum number of concurrent connections the proxy accepts")
+	rootCmd.Flags().Int64Var(&cacheExpiry, "cache-expiry", proxy.DefaultGlobalCacheExpiry, "Global cache expiry time duration (in seconds)")
+	rootCmd.Flags().UintVar(&cacheMaxEntry, "cache-max-entry", proxy.DefaultCacheMaxEntry, "Maximum number of keys the cache holds at a time")
+	rootCmd.Flags().UintVar(&maxConnection, "max-conn", proxy.DefaultMaxConcurrentConn, "Maximum number of concurrent connections the proxy accepts")
 }
 
 // Execute runs the command
