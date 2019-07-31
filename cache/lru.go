@@ -56,7 +56,7 @@ func (c *LRU) Get(key string) interface{} {
 // Add add key-value pair into the cache based on input, if max capacity is reached, the
 // least recently used entry will be expired to empty out slot for the new one.
 // This operation is atomic at the cache level
-func (c *LRU) Add(key string, val string) error {
+func (c *LRU) Add(key string, val interface{}) error {
 	elem, ok := c.entryMap[key]
 	if !ok {
 		if uint(c.content.Len()) >= c.config.MaxEntries {
