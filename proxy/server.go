@@ -80,8 +80,8 @@ func newServer(config Config) *server {
 func (s *server) getKey(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get("key")
 	// read from cache
-	val, err := s.cache.Get(key)
-	if err != nil || val == nil {
+	val := s.cache.Get(key)
+	if val == nil {
 		// read from redis
 		s.getKeyFromRedis(w, key)
 	} else {
@@ -119,6 +119,7 @@ func (s *server) getKeyFromRedis(w http.ResponseWriter, key string) {
 // Run starts the proxy web server
 func Run(config Config) {
 	server := newServer(config)
+	// TODO: add max connection middleware
 	http.HandleFunc("/get", server.getKey)
 
 	addr := fmt.Sprintf(":%s", server.config.ListenPort)

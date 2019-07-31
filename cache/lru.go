@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"fmt"
+	"container/list"
 	"sync"
 	"time"
 )
@@ -14,95 +14,103 @@ type Config struct {
 
 // LRU represents a LRU (least recently used) Cache
 type LRU struct {
-	content map[string]*entry
-	lock    *sync.Mutex
-	config  *Config
+	entryMap map[string]*list.Element
+	lock     *sync.Mutex
+	config   *Config
+	content  *list.List
 }
 
 type entry struct {
+	key          string
 	val          interface{}
 	latestAccess time.Time
-	lock         *sync.Mutex
 }
 
 // NewLRUCache - returns a LRU cache object
 func NewLRUCache(config *Config) *LRU {
 	return &LRU{
-		content: make(map[string]*entry),
-		lock:    new(sync.Mutex),
-		config:  config,
+		entryMap: make(map[string]*list.Element),
+		lock:     new(sync.Mutex),
+		config:   config,
+		content:  list.New(),
 	}
 }
 
 // Get retrieves value from cache based on key and returns error if key doesn't exist or has expired
-func (c *LRU) Get(key string) (interface{}, error) {
-	en, ok := c.content[key]
+func (c *LRU) Get(key string) interface{} {
+	elem, ok := c.entryMap[key]
 	if !ok {
-		return nil, nil
+		return nil
 	}
+	en := elem.Value.(*entry)
 	// check if the entry being retrieved has already expired
 	if time.Since(en.latestAccess) >= c.config.Expiry {
-		err := c.Remove(key)
-		if err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("entry with key \"%s\" has expired", key)
+		c.Remove(key)
+		return nil
 	}
-	return en.getVal(), nil
+	// get value and update cache metadata
+	defer c.refreshEntryMetadata(elem)
+	return en.val
 }
 
 // Add add key-value pair into the cache based on input, if max capacity is reached, the
 // least recently used entry will be expired to empty out slot for the new one.
 // This operation is atomic at the cache level
 func (c *LRU) Add(key string, val string) error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	en, ok := c.content[key]
+	elem, ok := c.entryMap[key]
 	if !ok {
-		if uint(len(c.content)) >= c.config.MaxEntries {
-			// TODO: evict lRU entry
+		if uint(c.content.Len()) >= c.config.MaxEntries {
+			lruEntry := c.content.Back().Value.(*entry)
+			// remove the entry at the tail of the list (LRU)
+			c.Remove(lruEntry.key)
 		}
-		c.content[key] = &entry{
+
+		c.lock.Lock()
+		defer c.lock.Unlock()
+
+		newEntry := &entry{
+			key:          key,
 			val:          val,
 			latestAccess: time.Now(),
-			lock:         new(sync.Mutex),
 		}
+		newElem := c.content.PushFront(newEntry)
+		c.entryMap[key] = newElem
 	} else {
-		en.update(val)
+		c.update(elem, val)
 	}
 	return nil
 }
 
 // Remove delets a key-value pair from the cache
 // this operation is atomic at the cache level
-func (c *LRU) Remove(key string) error {
+func (c *LRU) Remove(key string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	_, ok := c.content[key]
-	if !ok {
-		return fmt.Errorf("failed to delete key \"%s\"", key)
+	elem, ok := c.entryMap[key]
+	if ok {
+		delete(c.entryMap, key)
+		c.content.Remove(elem)
 	}
-	delete(c.content, key)
-	return nil
 }
 
-// update - updates the value of a cache entry, this operation is atomic for each entry
-func (en *entry) update(val string) {
-	en.lock.Lock()
-	defer en.lock.Unlock()
+// update an existing cache entry's value
+func (c *LRU) update(elem *list.Element, val interface{}) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
 
+	en := elem.Value.(*entry)
 	en.val = val
-	en.latestAccess = time.Now()
+	defer c.refreshEntryMetadata(elem)
 }
 
-// getVal - get the value of a cache entry, and refreshes its latest access time for each entry
-// this operation is atomic
-func (en *entry) getVal() interface{} {
-	en.lock.Lock()
-	defer en.lock.Unlock()
+// Refresh the entry's latest access time and update its position in the cache content
+// This function should be called after an existing entry is accessed
+func (c *LRU) refreshEntryMetadata(elem *list.Element) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
 
+	en := elem.Value.(*entry)
 	en.latestAccess = time.Now()
-	return en.val
+	c.content.MoveToFront(elem)
 }
