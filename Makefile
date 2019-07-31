@@ -1,6 +1,13 @@
-.PHONY: build, run, stop, test
+.PHONY: dep, build, run, stop, test
 
-build:
+clean:
+	rm -rf ./vendor
+
+dep: clean
+	command -v dep >/dev/null || curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+	dep ensure
+
+build: dep
 	go build -o ./server main.go
 
 run:
@@ -9,5 +16,6 @@ run:
 stop:
 	docker-compose down
 
-test: run
+test: dep stop run
 	go test ./...
+	make stop
