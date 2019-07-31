@@ -4,10 +4,27 @@ Redis cache proxy is a simple read-through proxy that provides basic LRU caching
 
 ## How to use
 
-To get the proxy server and a backing redis instance up and running (with docker containers). Do (Note: `docker`, `docker-compose` required)
+To get the proxy server with default settings and a backing redis instance up and running (with docker containers). Do (Note: `docker`, `docker-compose` required)
 
 ```bash
 make run
+
+# to retrieve a stored key-value pair
+curl -X GET "localhost:8888/get?key=<your key here>"
+```
+
+To build from source and customize the proxy settings, run (`go` required)
+
+```bash
+make build
+./server -h  # check help manual about configuration parameters
+./server -p 8888 --redis-addr localhost:6379 <more options>
+```
+
+To run all tests
+
+```bash
+make test
 ```
 
 ## Architecture
@@ -34,12 +51,6 @@ More details are documented along with the code itself :)
 `Add` - O(1)
 
 `Remove` - O(1)
-
-## How to run tests
-
-Unit tests - `make test:unit`
-
-Integration tests - `make test:integration`
 
 ## Time spent
 

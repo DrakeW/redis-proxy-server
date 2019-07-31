@@ -1,7 +1,7 @@
 .PHONY: build, run, stop, test
 
 build:
-	docker-compose build
+	go build -o ./server main.go
 
 run:
 	docker-compose up -d
