@@ -43,7 +43,7 @@ var cacheMaxEntry uint
 var maxConnection uint
 
 func init() {
-	rootCmd.Flags().StringVarP(&listenPort, "port", "p", proxy.DefaultListenPort, "The port redis-proxy should listen to")
+	rootCmd.Flags().StringVarP(&listenPort, "port", "p", "", "The port redis-proxy should listen to")
 	rootCmd.Flags().StringVar(&redisAddr, "redis-addr", "", "The address of the backing redis instance")
 	rootCmd.Flags().Int64Var(&cacheExpiry, "cache-expiry", proxy.DefaultGlobalCacheExpiry, "Global cache expiry time duration (in seconds)")
 	rootCmd.Flags().UintVar(&cacheMaxEntry, "cache-max-entry", proxy.DefaultCacheMaxEntry, "Maximum number of keys the cache holds at a time")

@@ -7,13 +7,12 @@ import (
 	"time"
 
 	"github.com/DrakeW/redis-cache-proxy/cache"
+
 	"github.com/go-redis/redis"
 	"github.com/sirupsen/logrus"
 )
 
 const (
-	// DefaultListenPort is the default proxy listen port
-	DefaultListenPort = "8888"
 	// DefaultGlobalCacheExpiry is the default global cache expiry time duration in seconds
 	DefaultGlobalCacheExpiry = 300 // 5min
 	// DefaultCacheMaxEntry is the default maximum number of cache entries
@@ -47,6 +46,9 @@ func newServer(config Config) *server {
 		FullTimestamp: true,
 	}
 	// set up redis client
+	if config.ListenPort == "" {
+		logger.Fatal("listening port cannot be empty")
+	}
 	if config.RedisAddr == "" {
 		logger.Fatal("address of redis instance cannot be empty")
 	}
