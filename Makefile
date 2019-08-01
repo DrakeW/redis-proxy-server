@@ -16,6 +16,5 @@ run:
 stop:
 	docker-compose down
 
-test: dep stop run
+test: run
 	go test ./...
-	make stop
